@@ -1,16 +1,45 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { getExplanation, getBrainBoost } from './services/geminiService';
 import { Header } from './components/Header';
 import { Loader } from './components/Loader';
 import { ResponseDisplay } from './components/ResponseDisplay';
 import { LightbulbIcon } from './components/icons/LightbulbIcon';
 import { BrainIcon } from './components/icons/BrainIcon';
+import { HistoryPanel } from './components/HistoryPanel';
+import { SpeechControl } from './components/SpeechControl';
+
+export interface HistoryItem {
+  id: string;
+  type: 'explain' | 'boost';
+  query: string;
+  response: string;
+  timestamp: number;
+}
 
 const App: React.FC = () => {
   const [userInput, setUserInput] = useState<string>('');
   const [apiResponse, setApiResponse] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [showHistory, setShowHistory] = useState<boolean>(false);
+
+  const [history, setHistory] = useState<HistoryItem[]>(() => {
+    try {
+      const savedHistory = localStorage.getItem('explainItHistory');
+      return savedHistory ? JSON.parse(savedHistory) : [];
+    } catch (error) {
+      console.error("Failed to parse history from localStorage", error);
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('explainItHistory', JSON.stringify(history));
+    } catch (error) {
+      console.error("Failed to save history to localStorage", error);
+    }
+  }, [history]);
 
   const handleExplainIt = useCallback(async () => {
     if (!userInput.trim() || isLoading) return;
@@ -21,6 +50,14 @@ const App: React.FC = () => {
     try {
       const response = await getExplanation(userInput);
       setApiResponse(response);
+      const newHistoryItem: HistoryItem = {
+        id: crypto.randomUUID(),
+        type: 'explain',
+        query: userInput,
+        response,
+        timestamp: Date.now(),
+      };
+      setHistory(prev => [newHistoryItem, ...prev]);
     } catch (err) {
       setError('An error occurred. Please try again.');
       console.error(err);
@@ -39,6 +76,14 @@ const App: React.FC = () => {
     try {
       const response = await getBrainBoost();
       setApiResponse(response);
+       const newHistoryItem: HistoryItem = {
+        id: crypto.randomUUID(),
+        type: 'boost',
+        query: 'Brain Boost',
+        response,
+        timestamp: Date.now(),
+      };
+      setHistory(prev => [newHistoryItem, ...prev]);
     } catch (err) {
       setError('An error occurred. Please try again.');
       console.error(err);
@@ -53,6 +98,43 @@ const App: React.FC = () => {
       handleExplainIt();
     }
   };
+
+  const handleReloadHistory = (item: HistoryItem) => {
+    if (item.type === 'explain') {
+      setUserInput(item.query);
+    } else {
+      setUserInput('');
+    }
+    setApiResponse(item.response);
+    setShowHistory(false);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleClearHistory = () => {
+    if (window.confirm("Are you sure you want to clear your entire learning history? This cannot be undone.")) {
+      setHistory([]);
+    }
+  };
+  
+  const speechText = useMemo(() => {
+    if (!apiResponse) return '';
+    const KEY_IDEA_MARKER = '**Key Idea:**';
+    let mainText = apiResponse;
+    let keyIdea = '';
+
+    if (apiResponse.includes(KEY_IDEA_MARKER)) {
+        const parts = apiResponse.split(KEY_IDEA_MARKER);
+        mainText = parts[0].trim();
+        keyIdea = parts[1]?.trim() || '';
+    }
+
+    // Remove markdown asterisks for cleaner speech
+    mainText = mainText.replace(/\*\*/g, '');
+    keyIdea = keyIdea.replace(/\*\*/g, '');
+
+    return keyIdea ? `${mainText}. Key Idea: ${keyIdea}` : mainText;
+  }, [apiResponse]);
+
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-100 text-slate-800 flex flex-col items-center p-4 sm:p-6">
@@ -94,11 +176,16 @@ const App: React.FC = () => {
             />
           </div>
 
-          <div className="mt-6 min-h-[150px] bg-slate-50/50 p-4 sm:p-6 rounded-lg border border-slate-200">
+          <div className="relative mt-6 min-h-[150px] bg-slate-50/50 p-4 sm:p-6 rounded-lg border border-slate-200">
             {isLoading && <Loader />}
             {error && <div className="text-red-600 font-semibold">{error}</div>}
             {!isLoading && !error && apiResponse && (
-              <ResponseDisplay response={apiResponse} />
+              <>
+                <div className="absolute top-2 right-2 z-10">
+                  <SpeechControl textToRead={speechText} />
+                </div>
+                <ResponseDisplay response={apiResponse} />
+              </>
             )}
             {!isLoading && !error && !apiResponse && (
               <div className="text-center text-slate-500">
@@ -107,6 +194,25 @@ const App: React.FC = () => {
             )}
           </div>
         </main>
+
+        <div className="text-center mt-6">
+          <button
+            onClick={() => setShowHistory(prev => !prev)}
+            className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-800 font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 rounded-md px-3 py-1"
+            aria-controls="history-panel"
+            aria-expanded={showHistory}
+          >
+            {showHistory ? 'Hide' : 'Show'} Learning History
+          </button>
+        </div>
+
+        {showHistory && (
+          <HistoryPanel
+            history={history}
+            onReload={handleReloadHistory}
+            onClear={handleClearHistory}
+          />
+        )}
       </div>
     </div>
   );
