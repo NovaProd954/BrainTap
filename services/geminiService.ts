@@ -1,18 +1,11 @@
+
 import { GoogleGenAI } from "@google/genai";
 
-const apiKey = process.env.API_KEY;
-if (!apiKey) {
-    // In a real app, you might want to show a more user-friendly error
-    // or disable functionality instead of throwing an error.
-    console.error("API_KEY environment variable not set. Please set it in your environment.");
-}
-
-const ai = new GoogleGenAI({ apiKey: apiKey || '' });
-const model = "gemini-2.5-flash";
+// As per the project guidelines, the API key must be read directly from the environment variable.
+// We assume `process.env.API_KEY` is always available in the execution environment.
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 export const getExplanation = async (topic: string): Promise<string> => {
-    if (!apiKey) return "API Key is missing. Please configure it to use the app.";
-
     const prompt = `
         Explain the following topic or question in the simplest way possible, as if you are a friendly and encouraging teacher explaining it to a 14-year-old student.
         - Use short, easy-to-understand sentences.
@@ -29,7 +22,7 @@ export const getExplanation = async (topic: string): Promise<string> => {
 
     try {
         const response = await ai.models.generateContent({
-            model,
+            model: "gemini-2.5-flash",
             contents: prompt,
         });
         return response.text;
@@ -40,8 +33,6 @@ export const getExplanation = async (topic: string): Promise<string> => {
 };
 
 export const getBrainBoost = async (): Promise<string> => {
-    if (!apiKey) return "API Key is missing. Please configure it to use the app.";
-    
     const prompt = `
         Generate a single, short, and interesting "Brain Boost".
         This can be a random educational fact, a practical life skill, or a quick study tip.
@@ -53,7 +44,7 @@ export const getBrainBoost = async (): Promise<string> => {
 
     try {
         const response = await ai.models.generateContent({
-            model,
+            model: "gemini-2.5-flash",
             contents: prompt,
         });
         return response.text;
